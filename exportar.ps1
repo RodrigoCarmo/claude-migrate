@@ -20,20 +20,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# robocopy aguenta caminho longo (>260 chars), ao contrario de Copy-Item
-function Copiar-Arvore {
-    param([string]$De, [string]$Para)
-    $saida = robocopy $De $Para /E /NFL /NDL /NJH /NJS /NP /R:1 /W:1
-    if ($LASTEXITCODE -ge 8) { throw "robocopy falhou ($LASTEXITCODE) em $De`n$saida" }
-    $global:LASTEXITCODE = 0
-}
-
-function Copiar-Arquivo {
-    param([string]$De, [string]$ParaPasta)
-    $saida = robocopy (Split-Path $De -Parent) $ParaPasta (Split-Path $De -Leaf) /NFL /NDL /NJH /NJS /NP /R:1 /W:1
-    if ($LASTEXITCODE -ge 8) { throw "robocopy falhou ($LASTEXITCODE) em $De`n$saida" }
-    $global:LASTEXITCODE = 0
-}
+# funcoes de copia e o indicador de progresso
+. (Join-Path $PSScriptRoot "lib\comum.ps1")
 
 $origem = Join-Path $env:USERPROFILE '.claude'
 $alvoClaude = Join-Path $Destino '.claude'
@@ -66,7 +54,7 @@ foreach ($arquivo in @('settings.json', 'settings.local.json', 'CLAUDE.md', 'mcp
 foreach ($pasta in @('hooks', 'skills', 'commands', 'agents', 'plugins')) {
     $caminho = Join-Path $origem $pasta
     if (Test-Path $caminho) {
-        Copiar-Arvore -De $caminho -Para (Join-Path $alvoClaude $pasta)
+        Copiar-Arvore -De $caminho -Para (Join-Path $alvoClaude $pasta) -Mensagem "copiando $pasta"
         $bytes = 0
         $arquivos = 0
         try {
@@ -89,7 +77,7 @@ if (Test-Path $projetosOrigem) {
         if (Test-Path $memoria) {
             $n = (Get-ChildItem $memoria -File).Count
             if ($n -gt 0) {
-                Copiar-Arvore -De $memoria -Para (Join-Path $alvo 'memory')
+                Copiar-Arvore -De $memoria -Para (Join-Path $alvo "memory") -Mensagem "memorias de $($projeto.Name)"
                 Write-Host "  ok  memory: $($projeto.Name) ($n arquivos)"
             }
         }
@@ -115,7 +103,7 @@ if ($IncluirHistorico) {
     }
     $checkpoints = Join-Path $origem "file-history"
     if (Test-Path $checkpoints) {
-        Copiar-Arvore -De $checkpoints -Para (Join-Path $alvoClaude "file-history")
+        Copiar-Arvore -De $checkpoints -Para (Join-Path $alvoClaude "file-history") -Mensagem "checkpoints de arquivo"
         $n = (Get-ChildItem $checkpoints -Directory).Count
         Write-Host "  ok  file-history ($n sessoes com checkpoint)"
     }
@@ -184,7 +172,7 @@ foreach ($script in @("exportar.ps1", "extrair.ps1", "importar.ps1", "verificar.
 # a pasta lib/ acompanha: extrair.ps1, importar.ps1 e verificar.ps1 dependem dela
 $libOrigem = Join-Path $PSScriptRoot "lib"
 if (Test-Path $libOrigem) {
-    Copiar-Arvore -De $libOrigem -Para (Join-Path $Destino "lib")
+    Copiar-Arvore -De $libOrigem -Para (Join-Path $Destino "lib") -Mensagem "copiando lib"
     Write-Host "  ok  lib/"
 } else {
     Write-Warning "pasta lib/ ausente: o pacote nao vai conseguir se verificar no destino."
@@ -250,8 +238,8 @@ if ($Compactar) {
         $pai = Split-Path $Destino -Parent
         $nome = (Split-Path $Destino -Leaf) + ".tgz"
         $arquivo = Join-Path $pai $nome
-        tar -czf $arquivo -C $Destino .
-        if ($LASTEXITCODE -ne 0) { throw "tar falhou" }
+        $null = Invoke-Externo -Programa "tar" -Mensagem "compactando o pacote" `
+            -Argumentos @("-czf", $arquivo, "-C", $Destino, ".")
         $mb = (Get-Item $arquivo).Length / 1MB
         Write-Host ""
         Write-Host ("Compactado: {0}  ({1:N1} MB)" -f $arquivo, $mb)

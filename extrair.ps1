@@ -15,6 +15,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# funcoes de copia e o indicador de progresso
+. (Join-Path $PSScriptRoot "lib\comum.ps1")
+
 # --- 1. Achar o arquivo ---
 if (-not $Arquivo) {
     $candidatos = @(
@@ -83,8 +86,13 @@ if ((Test-Path $Destino) -and (Get-ChildItem $Destino -Force | Select-Object -Fi
     Remove-Item $Destino -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $Destino | Out-Null
-tar -xzf $item.FullName -C $Destino
-if ($LASTEXITCODE -ne 0) { Write-Host '  falha ao extrair' -ForegroundColor Red; exit 1 }
+try {
+    $null = Invoke-Externo -Programa "tar" -Mensagem "extraindo o pacote" `
+        -Argumentos @("-xzf", $item.FullName, "-C", $Destino)
+} catch {
+    Write-Host "  falha ao extrair: $_" -ForegroundColor Red
+    exit 1
+}
 Write-Host "  ok  extraido em $Destino"
 
 # --- 6. Tirar a marca de origem dos scripts ---

@@ -14,12 +14,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-function Copiar-Arvore {
-    param([string]$De, [string]$Para)
-    $saida = robocopy $De $Para /E /NFL /NDL /NJH /NJS /NP /R:1 /W:1
-    if ($LASTEXITCODE -ge 8) { throw "robocopy falhou ($LASTEXITCODE) em $De`n$saida" }
-    $global:LASTEXITCODE = 0
-}
+# funcoes de copia e o indicador de progresso
+. (Join-Path $PSScriptRoot "lib\comum.ps1")
 
 $origemClaude  = Join-Path $Pacote '.claude'
 $destinoClaude = Join-Path $env:USERPROFILE '.claude'
@@ -40,7 +36,7 @@ if ((Test-Path $helperInv) -and (Get-Command node -ErrorAction SilentlyContinue)
 if (-not $Simular) {
     if (Test-Path $destinoClaude) {
         $bkp = "$destinoClaude.bkp"
-        if (-not (Test-Path $bkp)) { Copiar-Arvore -De $destinoClaude -Para $bkp; Write-Host "  backup: $bkp" }
+        if (-not (Test-Path $bkp)) { Copiar-Arvore -De $destinoClaude -Para $bkp -Mensagem "backup do ambiente atual"; Write-Host "  backup: $bkp" }
     }
     $cj = Join-Path $env:USERPROFILE '.claude.json'
     if ((Test-Path $cj) -and -not (Test-Path "$cj.bkp")) {
@@ -55,7 +51,7 @@ if ($Simular) {
     $arquivos | Where-Object { $_.DirectoryName -eq $origemClaude } |
         ForEach-Object { Write-Host "            .claude\$($_.Name)" }
 } else {
-    Copiar-Arvore -De $origemClaude -Para $destinoClaude
+    Copiar-Arvore -De $origemClaude -Para $destinoClaude -Mensagem "aplicando a configuracao"
     Write-Host '  ok  arvore .claude copiada'
 }
 
