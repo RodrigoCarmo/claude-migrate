@@ -1,10 +1,14 @@
 <#
 Importa o ambiente exportado, no PC novo.
 
-Uso:  .\importar.ps1 -Pacote "$env:USERPROFILE\claude-backup" -Simular   # so mostra o que faria
-      .\importar.ps1 -Pacote "$env:USERPROFILE\claude-backup"
+Uso:  .\importar.ps1 -Pacote "D:\claude-restore" -Simular   # so mostra o que faria
+      .\importar.ps1 -Pacote "D:\claude-restore"
 
-Faz backup de ~/.claude e ~/.claude.json antes de mexer.
+-Pacote e obrigatorio de proposito: e a pasta que voce escolheu ao extrair, e
+fica visivel no comando digitado em vez de ser adivinhada.
+
+Faz backup de ~/.claude e ~/.claude.json antes de mexer, e registra os caminhos
+dos backups em ~\.claude-migrate.json.
 #>
 param(
     [Parameter(Mandatory)][string]$Pacote,
@@ -14,45 +18,93 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# funcoes de copia e o indicador de progresso
+# copia, execucao externa, estado e a camada visual
 . (Join-Path $PSScriptRoot "lib\comum.ps1")
+Initialize-Ui
 
+$Pacote = [IO.Path]::GetFullPath($Pacote)
 $origemClaude  = Join-Path $Pacote '.claude'
 $destinoClaude = Join-Path $env:USERPROFILE '.claude'
-if (-not (Test-Path $origemClaude)) { throw "nao encontrei $origemClaude" }
+
+Show-Cabecalho -Comando $(if ($Simular) { 'importar (simulacao)' } else { 'importar' }) `
+    -Descricao $(if ($Simular) { 'mostra o que seria feito, sem escrever nada' } else { 'aplica o ambiente do pacote nesta maquina' })
+
+Show-Contexto ([ordered]@{
+    'pacote ' = $Pacote
+    'destino' = $destinoClaude
+})
+
+if (-not (Test-Path $origemClaude)) {
+    Show-Erro 'a pasta informada nao parece um pacote de migracao' @(
+        "nao encontrei $origemClaude",
+        'aponte -Pacote para a pasta que o extrair.ps1 gerou'
+    )
+    exit 1
+}
 
 # --- Integridade: transferencia por nuvem/rede pode chegar incompleta ---
+Show-Secao 'Conferindo o pacote'
 $helperInv = Join-Path $PSScriptRoot "lib\inventario.js"
 if ((Test-Path $helperInv) -and (Get-Command node -ErrorAction SilentlyContinue)) {
     node $helperInv verificar $Pacote
     if ($LASTEXITCODE -eq 2) {
-        Write-Host ""
-        throw "pacote incompleto: transfira de novo, de preferencia zipado."
+        Show-Erro 'pacote incompleto' @('transfira de novo, de preferencia compactado')
+        exit 1
     }
     if ($LASTEXITCODE -ne 0) { throw "falha ao verificar o inventario" }
 }
 
 # --- 0. Backup do que ja existe aqui ---
+# Os caminhos vao para o estado no fim: e o que permite desfazer depois sem
+# depender de voce ter guardado o scrollback do terminal.
+$backupClaude = $null
+$backupClaudeJson = $null
 if (-not $Simular) {
+    Show-Secao 'Backup do ambiente atual'
     if (Test-Path $destinoClaude) {
         $bkp = "$destinoClaude.bkp"
-        if (-not (Test-Path $bkp)) { Copiar-Arvore -De $destinoClaude -Para $bkp -Mensagem "backup do ambiente atual"; Write-Host "  backup: $bkp" }
+        # nao sobrescreve um .bkp anterior: ele pode ser o unico registro do
+        # ambiente original, de antes de um import que ja rodou.
+        if (-not (Test-Path $bkp)) {
+            Copiar-Arvore -De $destinoClaude -Para $bkp -Mensagem "backup do ambiente atual"
+            Show-Item -Texto '.claude' -Detalhe $bkp
+        } else {
+            Show-Item -Texto '.claude' -Detalhe 'backup anterior mantido' -Estado 'neutro'
+        }
+        $backupClaude = $bkp
+    } else {
+        Show-Item -Texto '.claude' -Detalhe 'nao havia ambiente aqui' -Estado 'neutro'
     }
     $cj = Join-Path $env:USERPROFILE '.claude.json'
-    if ((Test-Path $cj) -and -not (Test-Path "$cj.bkp")) {
-        Copy-Item $cj -Destination "$cj.bkp"; Write-Host "  backup: $cj.bkp"
+    if (Test-Path $cj) {
+        if (-not (Test-Path "$cj.bkp")) {
+            Copy-Item $cj -Destination "$cj.bkp"
+            Show-Item -Texto '.claude.json' -Detalhe "$cj.bkp"
+        } else {
+            Show-Item -Texto '.claude.json' -Detalhe 'backup anterior mantido' -Estado 'neutro'
+        }
+        $backupClaudeJson = "$cj.bkp"
     }
 }
 
 # --- 1. Arvore .claude ---
+Show-Secao 'Configuracao'
 if ($Simular) {
-    $arquivos = Get-ChildItem $origemClaude -Recurse -File
-    Write-Host "  [simular] copiaria $($arquivos.Count) arquivos para $destinoClaude"
+    # Arvore de plugin aninhada passa de 260 chars e o Get-ChildItem para ali, mas
+    # o robocopy do modo real atravessa. A simulacao nao pode abortar onde a
+    # aplicacao de verdade passaria: conta o que alcanca e declara o que faltou.
+    $errosLeitura = @()
+    $arquivos = @(Get-ChildItem $origemClaude -Recurse -File -ErrorAction SilentlyContinue -ErrorVariable errosLeitura)
+    Show-Item -Texto 'arvore .claude' -Detalhe "$($arquivos.Count) arquivos seriam copiados" -Estado 'info'
+    if ($errosLeitura.Count -gt 0) {
+        Show-Nota "+$($errosLeitura.Count) pastas que o Windows nao lista por caminho longo"
+        Show-Nota 'a copia usa robocopy e alcanca essas pastas'
+    }
     $arquivos | Where-Object { $_.DirectoryName -eq $origemClaude } |
-        ForEach-Object { Write-Host "            .claude\$($_.Name)" }
+        ForEach-Object { Show-Nota ".claude\$($_.Name)" }
 } else {
     Copiar-Arvore -De $origemClaude -Para $destinoClaude -Mensagem "aplicando a configuracao"
-    Write-Host '  ok  arvore .claude copiada'
+    Show-Item -Texto 'arvore .claude' -Detalhe 'copiada'
 }
 
 # --- 2. Reescreve caminhos do perfil antigo (hook, additionalDirectories, permissions) ---
@@ -63,24 +115,31 @@ if (Test-Path $manifesto) {
     if ($linha) { $usuarioAntigo = Split-Path ($linha -replace '^Perfil:\s*', '') -Leaf }
 }
 if ($usuarioAntigo -and $usuarioAntigo -ne $env:USERNAME) {
-    Write-Host "  usuario mudou: $usuarioAntigo -> $env:USERNAME"
+    Show-Item -Texto 'usuario mudou' -Detalhe "$usuarioAntigo  ->  $env:USERNAME" -Estado 'aviso'
     foreach ($nome in @('settings.json', 'settings.local.json', 'mcp.json')) {
         $arquivo = Join-Path $destinoClaude $nome
         if (-not (Test-Path $arquivo)) { continue }
         $texto = Get-Content $arquivo -Raw -Encoding UTF8
         $novo = $texto.Replace("Users\$usuarioAntigo", "Users\$env:USERNAME").
-                       Replace("Users\$usuarioAntigo", "Users\$env:USERNAME").
                        Replace("Users/$usuarioAntigo", "Users/$env:USERNAME")
         if ($novo -ne $texto) {
-            if ($Simular) { Write-Host "  [simular] reescreveria caminhos em $nome" }
-            else { [IO.File]::WriteAllText($arquivo, $novo, [Text.UTF8Encoding]::new($false)); Write-Host "  ok  caminhos reescritos em $nome" }
+            if ($Simular) {
+                Show-Item -Texto $nome -Detalhe 'caminhos seriam reescritos' -Estado 'info' -Recuo 2
+            } else {
+                [IO.File]::WriteAllText($arquivo, $novo, [Text.UTF8Encoding]::new($false))
+                Show-Item -Texto $nome -Detalhe 'caminhos reescritos' -Recuo 2
+            }
         }
     }
-    Write-Warning 'Confira a mao: plugins\installed_plugins.json (installPath) e qualquer permission com caminho literal.'
+    Show-Aviso 'Confira a mao' @(
+        'plugins\installed_plugins.json (installPath)',
+        'qualquer permission com caminho literal'
+    )
 }
 
 # --- 3. Merge de mcpServers e config de projeto no ~/.claude.json ---
 # node de proposito: ConvertFrom-Json do PS 5.1 estoura com chaves que diferem so na caixa.
+Show-Secao 'Integracoes'
 $parcial = Join-Path $Pacote 'claude-json-parcial.json'
 if (Test-Path $parcial) {
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
@@ -88,6 +147,7 @@ if (Test-Path $parcial) {
     }
     $js = @'
 const fs = require('fs');
+const ui = require(process.argv[5]);
 const [caminhoParcial, caminhoAlvo, modo] = process.argv.slice(2);
 const simular = modo === 'simular';
 const novo = JSON.parse(fs.readFileSync(caminhoParcial, 'utf8'));
@@ -96,9 +156,9 @@ atual.mcpServers ??= {};
 atual.projects ??= {};
 
 for (const [nome, cfg] of Object.entries(novo.mcpServers || {})) {
-  if (atual.mcpServers[nome]) { console.log(`  --  MCP '${nome}' ja existe, mantido`); continue; }
+  if (atual.mcpServers[nome]) { ui.item(`MCP ${nome}`, 'ja existe aqui, mantido', 'neutro'); continue; }
   if (!simular) atual.mcpServers[nome] = cfg;
-  console.log(`  ${simular ? '[simular] adicionaria' : 'ok  adicionado'} MCP '${nome}'`);
+  ui.item(`MCP ${nome}`, simular ? 'seria adicionado' : 'adicionado', simular ? 'info' : 'ok');
 }
 
 let importados = 0, ignorados = 0;
@@ -108,17 +168,20 @@ for (const [caminho, cfg] of Object.entries(novo.projects || {})) {
   if (!simular) atual.projects[caminho] = { ...(atual.projects[caminho] || {}), ...cfg };
   importados++;
 }
-console.log(`  ${simular ? '[simular] ' : 'ok  '}config de projeto: ${importados} importados, ${ignorados} ignorados (caminho inexistente aqui)`);
+ui.item('config por projeto',
+  ui.juntarDetalhe(`${importados} importados`, ignorados ? `${ignorados} sem pasta aqui` : ''),
+  ignorados ? 'aviso' : 'ok');
 
 if (!simular) {
   fs.writeFileSync(caminhoAlvo, JSON.stringify(atual, null, 2), 'utf8');
-  console.log('  ok  ~/.claude.json atualizado');
+  ui.item('~/.claude.json', 'atualizado');
 }
 '@
     $helper = Join-Path $env:TEMP 'claude-merge-config.js'
     $js | Out-File $helper -Encoding utf8
     $modo = if ($Simular) { 'simular' } else { 'aplicar' }
-    node $helper $parcial (Join-Path $env:USERPROFILE '.claude.json') $modo
+    $caminhoUi = (Join-Path $PSScriptRoot 'lib\ui.js') -replace '\\', '/'
+    node $helper $parcial (Join-Path $env:USERPROFILE '.claude.json') $modo $caminhoUi
     if ($LASTEXITCODE -ne 0) { throw 'falha no merge do .claude.json' }
     Remove-Item $helper -Force
 }
@@ -135,8 +198,7 @@ if ((Test-Path $helperLocais) -and (Get-Command node -ErrorAction SilentlyContin
 $helperHist = Join-Path $PSScriptRoot "lib\historico.js"
 $pastaProjects = Join-Path $destinoClaude "projects"
 if ((Test-Path $helperHist) -and (Test-Path $pastaProjects)) {
-    Write-Host ""
-    Write-Host "Historico de sessoes:"
+    Show-Secao 'Historico de sessoes'
     $mapaArquivo = ""
     if ($RemapearPaths -and $RemapearPaths.Count -gt 0) {
         $mapaArquivo = Join-Path $env:TEMP "claude-remapeamento.json"
@@ -149,22 +211,39 @@ if ((Test-Path $helperHist) -and (Test-Path $pastaProjects)) {
     node $helperHist $pastaProjects $mapaArquivo $modoHist
     if ($LASTEXITCODE -ne 0) { throw "falha ao diagnosticar o historico" }
 } elseif (Test-Path $pastaProjects) {
-    Write-Warning "diagnosticar-historico.js nao esta ao lado deste script; historico nao verificado."
+    Show-Item -Texto 'historico' -Detalhe 'historico.js ausente: nao verificado' -Estado 'aviso'
 }
-Write-Host ''
-Write-Host 'Falta fazer a mao:'
-Write-Host '  1. npm i -g @anthropic-ai/claude-code     (versao no MANIFESTO.md)'
-Write-Host '  2. instalar a extensao do Claude Code no seu editor, se usar'
-Write-Host '  3. claude  ->  /login'
-Write-Host '  4. /mcp     conferir os servidores'
-Write-Host '  5. /doctor  validar hooks, plugins e permissoes'
+
+# --- Anotar que este pacote foi aplicado ---
+if (-not $Simular) {
+    $null = Set-EstadoMigracao @{
+        pacote      = $Pacote
+        importadoEm = (Get-Date).ToString('o')
+        backups     = [ordered]@{
+            claude     = $backupClaude
+            claudeJson = $backupClaudeJson
+        }
+    }
+}
+
+# --- Fechamento ---
+if ($Simular) {
+    Show-Resumo -Titulo 'Simulacao concluida, nada foi escrito' -Estado 'info' -Proximo @(
+        "Se os numeros acima batem, aplique de verdade:",
+        ".\importar.ps1 -Pacote `"$Pacote`""
+    )
+    Write-Host ''
+    return
+}
+
+Show-Resumo -Titulo 'Ambiente importado' -Campos ([ordered]@{
+    'pacote'  = $Pacote
+    'backups' = $(if ($backupClaude) { "$backupClaude  (e .claude.json.bkp)" } else { 'nao havia ambiente anterior' })
+}) -Proximo @(
+    '1. npm i -g @anthropic-ai/claude-code      (versao no MANIFESTO.md)',
+    '2. instale a extensao do Claude Code no seu editor, se usar',
+    '3. claude   ->   /login, /mcp, /doctor, /resume'
+)
 
 $verificador = Join-Path $PSScriptRoot "verificar.ps1"
-if ((Test-Path $verificador) -and -not $Simular) {
-    Write-Host ""
-    Write-Host "Verificando o que ficou de pe nesta maquina..." -ForegroundColor Cyan
-    & $verificador
-} elseif (Test-Path $verificador) {
-    Write-Host ""
-    Write-Host "Depois de aplicar, rode:  .\verificar.ps1" -ForegroundColor Cyan
-}
+if (Test-Path $verificador) { & $verificador }

@@ -10,13 +10,13 @@
     entao a verificacao e estatica por decisao de seguranca.
 
     O relatorio separa quatro estados:
-      resumo     o que existe e quanto esta pronto
-      CORRIJA    impede o item de funcionar
-      CONFIRME   sinalizado a partir do texto, pode ser falso positivo
-      VALIDE     hooks que podem bloquear acoes, e so voce sabe se ainda decidem certo
+      Inventario   o que existe e quanto esta pronto
+      CORRIJA      impede o item de funcionar
+      CONFIRME     sinalizado a partir do texto, pode ser falso positivo
+      VALIDE       hooks que podem bloquear acoes, e so voce sabe se decidem certo
 
 .PARAMETER SemCor
-    Desliga as cores ANSI da saida.
+    Desliga as cores da saida.
 
 .EXAMPLE
     .\verificar.ps1
@@ -27,9 +27,19 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# A analise vive em lib\verificar.js; aqui so preparamos o terreno para ela.
+$comum = Join-Path $PSScriptRoot 'lib\comum.ps1'
+if (Test-Path $comum) { . $comum; Initialize-Ui }
+
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Host 'node nao encontrado no PATH.' -ForegroundColor Red
-    Write-Host 'O Claude Code instalado via npm ja traz o Node; instale-o antes de verificar.'
+    if (Get-Command Show-Erro -ErrorAction SilentlyContinue) {
+        Show-Erro 'node nao encontrado no PATH' @(
+            'o Claude Code instalado via npm ja traz o Node',
+            'instale-o antes de verificar'
+        )
+    } else {
+        Write-Host 'node nao encontrado no PATH.' -ForegroundColor Red
+    }
     exit 1
 }
 
@@ -41,5 +51,28 @@ if (-not (Test-Path $analisador)) {
 
 if ($SemCor) { $env:NO_COLOR = '1' }
 
-node $analisador
-exit $LASTEXITCODE
+# O processo PowerShell ja detectou o que este console aguenta. Repassar evita
+# que o Node redescubra com menos informacao e desenhe caixas que viram lixo.
+if (Get-Command Get-CapacidadesUi -ErrorAction SilentlyContinue) {
+    $capacidades = Get-CapacidadesUi
+    $env:CM_UNICODE = if ($capacidades.Unicode) { '1' } else { '0' }
+    $env:CM_LARGURA = [string]$capacidades.Largura
+}
+
+# De onde veio este ambiente, quando o extrair/importar registraram.
+if (Get-Command Get-EstadoMigracao -ErrorAction SilentlyContinue) {
+    $estado = Get-EstadoMigracao
+    if ($estado -and $estado.importadoEm) {
+        $quando = try { ([datetime]$estado.importadoEm).ToString('dd/MM/yyyy HH:mm') } catch { $estado.importadoEm }
+        $env:CM_ORIGEM = "$($estado.pacote)   em $quando"
+    }
+}
+
+try {
+    node $analisador
+    $codigo = $LASTEXITCODE
+} finally {
+    Remove-Item Env:\CM_UNICODE, Env:\CM_LARGURA, Env:\CM_ORIGEM -ErrorAction SilentlyContinue
+}
+
+exit $codigo

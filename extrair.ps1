@@ -1,103 +1,119 @@
 <#
 Extrai o pacote de migracao no PC novo, com diagnostico do que costuma dar errado.
 
-Uso:  .\extrair.ps1
-      .\extrair.ps1 -Arquivo "$env:USERPROFILE\Downloads\claude-backup.tgz"
+Uso:  .\extrair.ps1 -Arquivo "$env:USERPROFILE\Downloads\claude-backup.tgz" -Destino "D:\claude-restore"
+      .\extrair.ps1 -Arquivo "...\claude-backup.tgz" -Destino "D:\claude-restore" -Limpar
 
-Sem parametros, procura claude-backup.tgz nos lugares obvios e extrai em
-%USERPROFILE%\claude-backup.
+Os dois caminhos sao obrigatorios de proposito: voce diz de onde ler e onde
+escrever, e ambos ficam visiveis no comando digitado.
+
+Antes de extrair confere se o arquivo chegou inteiro, se nao e um placeholder do
+OneDrive e se o tar consegue abrir. Depois tira a marca de origem dos scripts,
+que de outro modo faria os hooks importados falharem em silencio.
 #>
 param(
-    [string]$Arquivo,
-    [string]$Destino = (Join-Path $env:USERPROFILE 'claude-backup'),
+    [Parameter(Mandatory)][string]$Arquivo,
+    [Parameter(Mandatory)][string]$Destino,
     [switch]$Limpar
 )
 
 $ErrorActionPreference = 'Stop'
 
-# funcoes de copia e o indicador de progresso
+# copia, execucao externa e a camada visual
 . (Join-Path $PSScriptRoot "lib\comum.ps1")
+Initialize-Ui
 
-# --- 1. Achar o arquivo ---
-if (-not $Arquivo) {
-    # O @() externo e obrigatorio: com um unico resultado, o Where-Object devolve a
-    # propria string em vez de um array, e [0] passaria a indexar o caractere "C".
-    $candidatos = @(
-        @(
-            (Join-Path (Get-Location) 'claude-backup.tgz'),
-            (Join-Path $env:USERPROFILE 'claude-backup.tgz'),
-            (Join-Path $env:USERPROFILE 'Downloads\claude-backup.tgz'),
-            (Join-Path $env:USERPROFILE 'Desktop\claude-backup.tgz'),
-            (Join-Path $env:USERPROFILE 'OneDrive\claude-backup.tgz')
-        ) | Where-Object { Test-Path $_ }
-    )
+Show-Cabecalho -Comando 'extrair' -Descricao 'abre o pacote no lugar que voce escolheu'
 
-    if (-not $candidatos) {
-        Write-Host 'Nao achei claude-backup.tgz. Procurei em:' -ForegroundColor Red
-        Write-Host "  $(Get-Location)  (pasta atual)"
-        Write-Host "  $env:USERPROFILE, Downloads, Desktop, OneDrive"
-        Write-Host ''
-        Write-Host 'Passe o caminho completo:' -ForegroundColor Yellow
-        Write-Host '  .\extrair.ps1 -Arquivo "<caminho completo do .tgz>"'
-        exit 1
-    }
-    $Arquivo = $candidatos[0]
-    Write-Host "  achei: $Arquivo"
+if (-not (Test-Path $Arquivo)) {
+    Show-Erro 'o arquivo informado nao existe' @($Arquivo)
+    exit 1
 }
-
-if (-not (Test-Path $Arquivo)) { Write-Host "nao existe: $Arquivo" -ForegroundColor Red; exit 1 }
 # caminho absoluto de proposito: processo nativo nao herda o Set-Location do
 # PowerShell, entao caminho relativo falha com "Failed to open" mesmo com o
 # arquivo do lado. $item.FullName resolve isso para o tar.
 $item = Get-Item $Arquivo
+$Destino = [IO.Path]::GetFullPath($Destino)
 
-# --- 2. E um placeholder do OneDrive? ---
+Show-Contexto ([ordered]@{
+    'arquivo' = $item.FullName
+    'destino' = $Destino
+})
+
+# Extrair sobre a pasta do proprio projeto sobrescreveria os scripts em uso.
+if ($Destino -eq [IO.Path]::GetFullPath($PSScriptRoot)) {
+    Show-Erro 'o destino e a pasta deste projeto' @('escolha outro lugar para extrair')
+    exit 1
+}
+
+Show-Secao 'Conferindo o arquivo'
+
+# --- 1. E um placeholder do OneDrive? ---
 # Files On-Demand deixa o arquivo com tamanho logico certo mas sem conteudo local.
 $RECALL_ON_DATA_ACCESS = 0x400000
 $atributos = [int]$item.Attributes
 if (($atributos -band $RECALL_ON_DATA_ACCESS) -or ($item.Attributes -band [IO.FileAttributes]::Offline)) {
-    Write-Host '  ATENCAO: o arquivo e um placeholder do OneDrive (nao esta baixado)' -ForegroundColor Yellow
-    Write-Host '  Clique com o botao direito > "Sempre manter neste dispositivo", espere baixar e rode de novo.' -ForegroundColor Yellow
+    Show-Item -Texto 'conteudo local' -Detalhe 'placeholder do OneDrive' -Estado 'erro'
+    Show-Erro 'o arquivo nao esta baixado nesta maquina' @(
+        'botao direito no .tgz > "Sempre manter neste dispositivo"',
+        'espere baixar e rode de novo'
+    )
     exit 1
 }
+Show-Item -Texto 'conteudo local' -Detalhe 'baixado'
 
-# --- 3. Tamanho plausivel? ---
-"  tamanho: {0:N1} MB" -f ($item.Length / 1MB) | Write-Host
+# --- 2. Tamanho plausivel? ---
+$mb = $item.Length / 1MB
 if ($item.Length -lt 1MB) {
-    Write-Host '  ATENCAO: arquivo pequeno demais. A transferencia provavelmente nao terminou.' -ForegroundColor Red
+    Show-Item -Texto 'tamanho' -Detalhe ('{0:N1} MB' -f $mb) -Estado 'erro'
+    Show-Erro 'arquivo pequeno demais' @('a transferencia provavelmente nao terminou: copie de novo')
     exit 1
 }
+Show-Item -Texto 'tamanho' -Detalhe ('{0:N1} MB' -f $mb)
 
-# --- 4. O tar consegue ler? ---
+# --- 3. O tar consegue ler? ---
 $null = tar -tzf $item.FullName 2>&1
 if ($LASTEXITCODE -ne 0) {
-    Write-Host '  ATENCAO: o tar nao conseguiu ler o arquivo.' -ForegroundColor Red
-    Write-Host '  Ou a transferencia corrompeu, ou foi enviado em modo texto. Transfira de novo em modo binario.' -ForegroundColor Red
+    Show-Item -Texto 'leitura pelo tar' -Detalhe 'falhou' -Estado 'erro'
+    Show-Erro 'o tar nao conseguiu abrir o arquivo' @(
+        'ou a transferencia corrompeu, ou foi enviada em modo texto',
+        'transfira de novo em modo binario'
+    )
     exit 1
 }
-Write-Host '  ok  arquivo integro'
+Show-Item -Texto 'leitura pelo tar' -Detalhe 'integro'
 
-# --- 5. Extrair ---
-$Destino = [IO.Path]::GetFullPath($Destino)
-if ((Test-Path $Destino) -and (Get-ChildItem $Destino -Force | Select-Object -First 1)) {
-    Write-Host "  o destino ja tem conteudo: $Destino" -ForegroundColor Yellow
-    Write-Host "  extrair por cima falha: os .pack do git sao read-only." -ForegroundColor Yellow
+# --- 4. Destino ocupado ---
+# Extrair por cima falha no meio: os .pack dos plugins sao read-only.
+if ((Test-Path $Destino) -and (Get-ChildItem $Destino -Force -ErrorAction SilentlyContinue | Select-Object -First 1)) {
     if (-not $Limpar) {
-        Write-Host "  rode de novo com -Limpar para apagar e extrair do zero," -ForegroundColor Yellow
-        Write-Host "  ou passe -Destino apontando para uma pasta nova." -ForegroundColor Yellow
+        Show-Item -Texto 'destino' -Detalhe 'ja tem conteudo' -Estado 'erro'
+        Show-Erro "a pasta de destino nao esta vazia" @(
+            $Destino,
+            'extrair por cima falha: os .pack dos plugins sao read-only',
+            '',
+            'rode de novo com -Limpar para apagar e extrair do zero,',
+            'ou passe -Destino apontando para uma pasta nova'
+        )
         exit 1
     }
+    Show-Item -Texto 'destino' -Detalhe '-Limpar: apagando o conteudo anterior' -Estado 'aviso'
     Remove-Item $Destino -Recurse -Force
 }
+
+# --- 5. Extrair ---
+Show-Secao 'Extraindo'
 New-Item -ItemType Directory -Force -Path $Destino | Out-Null
 try {
     $null = Invoke-Externo -Programa "tar" -Mensagem "extraindo o pacote" `
         -Argumentos @("-xzf", $item.FullName, "-C", $Destino)
 } catch {
-    Write-Host "  falha ao extrair: $_" -ForegroundColor Red
+    Show-Erro 'falha ao extrair' @("$_")
     exit 1
 }
-Write-Host "  ok  extraido em $Destino"
+$totalArquivos = 0
+try { $totalArquivos = (Get-ChildItem $Destino -Recurse -File -ErrorAction SilentlyContinue).Count } catch { }
+Show-Item -Texto 'pacote aberto' -Detalhe (Format-Plural $totalArquivos 'arquivo')
 
 # --- 6. Tirar a marca de origem dos scripts ---
 # Arquivo que atravessa uma transferencia chega marcado e a politica de execucao o recusa.
@@ -108,7 +124,9 @@ $marcados = Get-ChildItem $Destino -Recurse -File -Include *.ps1, *.js, *.psm1, 
             Where-Object { Get-Item $_.FullName -Stream Zone.Identifier -ErrorAction SilentlyContinue }
 if ($marcados) {
     $marcados | Unblock-File
-    Write-Host "  ok  marca de origem removida de $($marcados.Count) script(s)"
+    Show-Item -Texto 'marca de origem' -Detalhe ('removida de ' + (Format-Plural $marcados.Count 'script'))
+} else {
+    Show-Item -Texto 'marca de origem' -Detalhe 'nenhum script marcado'
 }
 
 # --- 7. Conferir o inventario ---
@@ -116,10 +134,23 @@ $inv = Join-Path $Destino 'lib\inventario.js'
 if ((Test-Path $inv) -and (Get-Command node -ErrorAction SilentlyContinue)) {
     node $inv verificar $Destino
 } else {
-    Write-Host '  (sem node ainda: o import vai conferir o inventario depois)'
+    Show-Item -Texto 'integridade' -Detalhe 'sem node ainda: o import confere depois' -Estado 'neutro'
 }
 
-Write-Host ''
-Write-Host 'Proximo passo:' -ForegroundColor Green
-Write-Host "  cd '$Destino'"
-Write-Host '  .\importar.ps1 -Pacote . -Simular'
+# --- 8. Registrar o que foi feito ---
+# Nao substitui os parametros do proximo passo: serve de trilha para o
+# verificar.ps1 dizer de onde veio o ambiente, e para saber o que desfazer.
+$null = Set-EstadoMigracao @{
+    pacote      = $Destino
+    tgzOrigem   = $item.FullName
+    extraidoEm  = (Get-Date).ToString('o')
+    importadoEm = $null
+}
+
+Show-Resumo -Titulo 'Pacote extraido' -Campos ([ordered]@{
+    'pasta'    = $Destino
+    'arquivos' = "$totalArquivos"
+}) -Proximo @(
+    "cd `"$Destino`"",
+    ".\importar.ps1 -Pacote `"$Destino`" -Simular"
+)
