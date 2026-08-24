@@ -1,0 +1,19 @@
+# Pacotes gerados pelo proprio projeto.
+#
+# Um pacote contem as credenciais dos servidores MCP e o conteudo das conversas de
+# quem exportou. Commitar um por acidente publica tudo isso.
+#
+# Os padroes abaixo pegam o pacote por CONTEUDO, e nao pelo nome da pasta: quem exportar
+# para "meu-ambiente" em vez de "claude-backup" continua protegido.
+*.tgz
+**/.claude/
+**/INVENTARIO.txt
+**/MANIFESTO.md
+**/claude-json-parcial.json
+**/projetos-locais/
+**/.credentials.json
+**/.claude.json
+
+# Restos de teste
+*.bkp
+*.tmp
