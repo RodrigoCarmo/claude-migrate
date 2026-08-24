@@ -35,24 +35,6 @@ O pacote gerado traz dois arquivos de apoio, além do ambiente em si:
 
 ---
 
-## Camada visual
-
-Toda a saída passa por `lib/ui.ps1` (PowerShell) e `lib/ui.js` (Node), que são
-espelhos um do outro: os scripts dizem **o que** mostrar, essa camada decide **como**.
-É o único lugar que conhece cores, glifos e largura de terminal.
-
-Duas capacidades são detectadas, nunca assumidas. Sem UTF-8 no console, cada glifo cai
-para um equivalente ASCII; com a saída redirecionada (pipe, arquivo, CI), a cor é
-suprimida. O processo PowerShell detecta e publica o resultado em `CM_UNICODE` e
-`CM_LARGURA`, que os helpers Node herdam, para que as duas metades desenhem igual.
-
-Ao editar o projeto: **nenhum caractere fora do ASCII escrito literalmente em `.ps1`**.
-O PowerShell 5.1 lê script sem BOM como ANSI, e um `·` colado no código chega na tela
-como `Â·`. Todo glifo nasce de um ponto de código em `ui.ps1` e os scripts o pedem
-pelo nome, via `Get-Glifo` ou `Join-Detalhe`.
-
----
-
 ## Estado da migração
 
 `extrair.ps1` e `importar.ps1` registram o que fizeram em `~\.claude-migrate.json`:
