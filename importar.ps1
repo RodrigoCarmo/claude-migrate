@@ -1,8 +1,8 @@
 <#
 Importa o ambiente exportado, no PC novo.
 
-Uso:  .\importar.ps1 -Pacote 'D:\claude-backup' -Simular   # so mostra o que faria
-      .\importar.ps1 -Pacote 'D:\claude-backup'
+Uso:  .\importar.ps1 -Pacote "$env:USERPROFILE\claude-backup" -Simular   # so mostra o que faria
+      .\importar.ps1 -Pacote "$env:USERPROFILE\claude-backup"
 
 Faz backup de ~/.claude e ~/.claude.json antes de mexer.
 #>

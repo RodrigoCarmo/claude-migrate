@@ -1,10 +1,10 @@
 <#
 Exporta o ambiente Claude Code desta maquina para uma pasta portatil.
 
-Uso:  .\exportar.ps1 -Destino 'D:\claude-backup'
-      .\exportar.ps1 -Destino 'D:\claude-backup' -IncluirHistorico   # + as conversas (pesado)
-      .\exportar.ps1 -Destino 'D:\claude-backup' -Compactar          # + .tgz para transferir
-      .\exportar.ps1 -Destino 'D:\claude-backup' -IncluirSegredos    # + credenciais de sessao
+Uso:  .\exportar.ps1 -Destino "$env:USERPROFILE\claude-backup"
+      .\exportar.ps1 -Destino "$env:USERPROFILE\claude-backup" -IncluirHistorico   # + as conversas
+      .\exportar.ps1 -Destino "$env:USERPROFILE\claude-backup" -Compactar          # + .tgz para transferir
+      .\exportar.ps1 -Destino "$env:USERPROFILE\claude-backup" -IncluirSegredos    # + credenciais
 
 O pacote leva as credenciais dos servidores MCP e, com -IncluirHistorico, o conteudo
 das conversas. Trate-o como material sensivel: cada pessoa gera o seu.
@@ -243,6 +243,17 @@ if ($Compactar) {
         $mb = (Get-Item $arquivo).Length / 1MB
         Write-Host ""
         Write-Host ("Compactado: {0}  ({1:N1} MB)" -f $arquivo, $mb)
-        Write-Host "No PC novo:  tar -xzf $nome -C <pasta de destino>"
+        Write-Host ""
+        # Ficam as duas coisas: a pasta e o .tgz ao lado dela. Quem le so a linha
+        # "Pronto:" costuma tentar levar a pasta inteira, ou nao achar o .tgz depois.
+        Write-Host "Ficaram dois artefatos nesta maquina:"
+        Write-Host "  pasta:   $Destino"
+        Write-Host "  arquivo: $arquivo"
+        Write-Host ""
+        Write-Host "Leve so o arquivo. No PC novo, com este projeto em maos:"
+        Write-Host "  .\extrair.ps1 -Arquivo <caminho do .tgz aqui>"
+        Write-Host ""
+        Write-Host "Os dois carregam credenciais de MCP e o conteudo das conversas."
+        Write-Host "Apague ambos depois que o import do outro lado funcionar."
     }
 }

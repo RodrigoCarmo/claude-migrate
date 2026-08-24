@@ -2,7 +2,7 @@
 Extrai o pacote de migracao no PC novo, com diagnostico do que costuma dar errado.
 
 Uso:  .\extrair.ps1
-      .\extrair.ps1 -Arquivo 'D:\claude-backup.tgz' -Destino 'C:\Users\eu\claude-backup'
+      .\extrair.ps1 -Arquivo "$env:USERPROFILE\Downloads\claude-backup.tgz"
 
 Sem parametros, procura claude-backup.tgz nos lugares obvios e extrai em
 %USERPROFILE%\claude-backup.
@@ -20,13 +20,17 @@ $ErrorActionPreference = 'Stop'
 
 # --- 1. Achar o arquivo ---
 if (-not $Arquivo) {
+    # O @() externo e obrigatorio: com um unico resultado, o Where-Object devolve a
+    # propria string em vez de um array, e [0] passaria a indexar o caractere "C".
     $candidatos = @(
-        (Join-Path (Get-Location) 'claude-backup.tgz'),
-        (Join-Path $env:USERPROFILE 'claude-backup.tgz'),
-        (Join-Path $env:USERPROFILE 'Downloads\claude-backup.tgz'),
-        (Join-Path $env:USERPROFILE 'Desktop\claude-backup.tgz'),
-        (Join-Path $env:USERPROFILE 'OneDrive\claude-backup.tgz')
-    ) | Where-Object { Test-Path $_ }
+        @(
+            (Join-Path (Get-Location) 'claude-backup.tgz'),
+            (Join-Path $env:USERPROFILE 'claude-backup.tgz'),
+            (Join-Path $env:USERPROFILE 'Downloads\claude-backup.tgz'),
+            (Join-Path $env:USERPROFILE 'Desktop\claude-backup.tgz'),
+            (Join-Path $env:USERPROFILE 'OneDrive\claude-backup.tgz')
+        ) | Where-Object { Test-Path $_ }
+    )
 
     if (-not $candidatos) {
         Write-Host 'Nao achei claude-backup.tgz. Procurei em:' -ForegroundColor Red
@@ -34,7 +38,7 @@ if (-not $Arquivo) {
         Write-Host "  $env:USERPROFILE, Downloads, Desktop, OneDrive"
         Write-Host ''
         Write-Host 'Passe o caminho completo:' -ForegroundColor Yellow
-        Write-Host "  .\extrair.ps1 -Arquivo 'D:\onde\estiver\claude-backup.tgz'"
+        Write-Host '  .\extrair.ps1 -Arquivo "<caminho completo do .tgz>"'
         exit 1
     }
     $Arquivo = $candidatos[0]
