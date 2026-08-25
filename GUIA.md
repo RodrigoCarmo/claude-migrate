@@ -118,6 +118,10 @@ ferramentas de linha de comando que suas skills usem.
 
 Com tudo funcionando, apague o `.tgz` e a pasta extraída.
 
+Os backups em `~\.claude.bkp.<data>-<hora>` **não** são sobra de instalação: são eles
+que o `restaurar.ps1` usa para voltar atrás. Apague só quando tiver confiança no
+ambiente novo, e veja "Voltar atrás" antes.
+
 ---
 
 ## Parâmetros

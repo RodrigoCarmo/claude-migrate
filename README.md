@@ -2,7 +2,8 @@
 
 Scripts locais que copiam seu ambiente do Claude Code de uma máquina para outra:
 configuração, hooks, skills, plugins, memórias e histórico de conversas. No destino,
-verificam o que consegue rodar.
+verificam o que consegue rodar, e voltam atrás se a migração não for a que você
+queria.
 
 Windows, PowerShell 5.1. Requer `node` e `tar` no PATH — o `node` vem com o Claude Code
 instalado via npm, e o `tar` acompanha o Windows desde a versão 1803. O export para se o
