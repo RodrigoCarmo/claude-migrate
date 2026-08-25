@@ -87,8 +87,9 @@ Se aparecerem sessões órfãs, o repositório está em outro caminho aqui:
 .\importar.ps1 -Pacote "D:\claude-restore"
 ```
 
-Faz backup de `~\.claude` e `~\.claude.json` antes de mexer, aplica e chama o verificador.
-Os caminhos dos backups ficam registrados em `~\.claude-migrate.json`.
+Faz backup de `~\.claude` e `~\.claude.json` antes de mexer, um backup novo a cada
+import e carimbado com data e hora, aplica e chama o verificador. Os caminhos ficam
+registrados em `~\.claude-migrate.json`.
 
 ### 9. Leia o verificador
 
@@ -152,4 +153,4 @@ Com tudo funcionando, apague o `.tgz` e a pasta extraída.
 | script não executa | `powershell -ExecutionPolicy Bypass -File .\verificar.ps1` |
 | conversas não aparecem | abra o Claude na pasta do repositório; se faltarem, veja o passo 7 |
 | glifos saem como `+` e `-` | o console não está em UTF-8; a saída continua correta, só em ASCII |
-| quer voltar atrás | apague o que veio e renomeie `~\.claude.bkp` e `~\.claude.json.bkp` |
+| quer voltar atrás | apague o que veio e renomeie o backup mais recente, `~\.claude.bkp.<data>-<hora>` e `~\.claude.json.bkp.<data>-<hora>` |

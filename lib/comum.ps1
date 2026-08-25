@@ -109,6 +109,21 @@ function Copiar-Arquivo {
     $global:LASTEXITCODE = 0
 }
 
+<#
+Devolve o caminho pedido, ou o primeiro sufixado que ainda esteja livre.
+
+Dois imports no mesmo segundo nao acontecem na pratica, mas colidir aqui
+significaria despejar dois ambientes dentro da mesma pasta de backup.
+#>
+function Get-CaminhoLivre {
+    param([Parameter(Mandatory)][string]$Caminho)
+
+    if (-not (Test-Path $Caminho)) { return $Caminho }
+    $tentativa = 2
+    while (Test-Path "$Caminho-$tentativa") { $tentativa++ }
+    return "$Caminho-$tentativa"
+}
+
 # ---------------------------------------------------------------------------
 # Estado da migracao
 #

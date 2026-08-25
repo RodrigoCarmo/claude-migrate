@@ -7,8 +7,8 @@ Uso:  .\importar.ps1 -Pacote "D:\claude-restore" -Simular   # so mostra o que fa
 -Pacote e obrigatorio de proposito: e a pasta que voce escolheu ao extrair, e
 fica visivel no comando digitado em vez de ser adivinhada.
 
-Faz backup de ~/.claude e ~/.claude.json antes de mexer, e registra os caminhos
-dos backups em ~\.claude-migrate.json.
+Faz backup de ~/.claude e ~/.claude.json antes de mexer, um novo a cada import,
+carimbado com data e hora, e registra os caminhos em ~\.claude-migrate.json.
 #>
 param(
     [Parameter(Mandatory)][string]$Pacote,
@@ -55,35 +55,44 @@ if ((Test-Path $helperInv) -and (Get-Command node -ErrorAction SilentlyContinue)
 }
 
 # --- 0. Backup do que ja existe aqui ---
+# Um backup por import, carimbado com data e hora, e nada e sobrescrito. O mais
+# antigo continua sendo o registro do ambiente original, e cada import seguinte
+# ganha o seu proprio ponto de retorno. Guardar apenas o primeiro deixava o
+# trabalho feito entre dois imports fora do ambiente vivo e fora do backup.
+#
 # Os caminhos vao para o estado no fim: e o que permite desfazer depois sem
 # depender de voce ter guardado o scrollback do terminal.
 $backupClaude = $null
 $backupClaudeJson = $null
 if (-not $Simular) {
     Show-Secao 'Backup do ambiente atual'
+
+    # o mesmo carimbo nos dois: e o que mostra, olhando a pasta do perfil, que
+    # aquele .claude e aquele .claude.json sairam do mesmo import
+    $carimbo = (Get-Date).ToString('yyyyMMdd-HHmmss')
+
     if (Test-Path $destinoClaude) {
-        $bkp = "$destinoClaude.bkp"
-        # nao sobrescreve um .bkp anterior: ele pode ser o unico registro do
-        # ambiente original, de antes de um import que ja rodou.
-        if (-not (Test-Path $bkp)) {
-            Copiar-Arvore -De $destinoClaude -Para $bkp -Mensagem "backup do ambiente atual"
-            Show-Item -Texto '.claude' -Detalhe $bkp
-        } else {
-            Show-Item -Texto '.claude' -Detalhe 'backup anterior mantido' -Estado 'neutro'
-        }
+        $bkp = Get-CaminhoLivre "$destinoClaude.bkp.$carimbo"
+        Copiar-Arvore -De $destinoClaude -Para $bkp -Mensagem "backup do ambiente atual"
+        Show-Item -Texto '.claude' -Detalhe $bkp
         $backupClaude = $bkp
     } else {
         Show-Item -Texto '.claude' -Detalhe 'nao havia ambiente aqui' -Estado 'neutro'
     }
+
     $cj = Join-Path $env:USERPROFILE '.claude.json'
     if (Test-Path $cj) {
-        if (-not (Test-Path "$cj.bkp")) {
-            Copy-Item $cj -Destination "$cj.bkp"
-            Show-Item -Texto '.claude.json' -Detalhe "$cj.bkp"
-        } else {
-            Show-Item -Texto '.claude.json' -Detalhe 'backup anterior mantido' -Estado 'neutro'
-        }
-        $backupClaudeJson = "$cj.bkp"
+        $bkpJson = Get-CaminhoLivre "$cj.bkp.$carimbo"
+        Copy-Item $cj -Destination $bkpJson
+        Show-Item -Texto '.claude.json' -Detalhe $bkpJson
+        $backupClaudeJson = $bkpJson
+    }
+
+    # um backup inteiro por import ocupa espaco, e o .claude carrega as
+    # transcricoes: quem migra varias vezes precisa ver a pilha crescer
+    $acumulados = @(Get-ChildItem $env:USERPROFILE -Filter '.claude.bkp*' -Directory -Force -ErrorAction SilentlyContinue)
+    if ($acumulados.Count -gt 1) {
+        Show-Nota "$(Format-Plural $acumulados.Count 'backup') de .claude em $env:USERPROFILE, apague os que nao precisa mais"
     }
 }
 
@@ -236,9 +245,17 @@ if ($Simular) {
     return
 }
 
+# o caminho carimbado nao cabe inteiro duas vezes na linha do resumo: o .claude
+# vai completo, e do .claude.json basta o nome do arquivo
+$resumoBackups = 'nao havia ambiente anterior'
+if ($backupClaude) {
+    $resumoBackups = $backupClaude
+    if ($backupClaudeJson) { $resumoBackups += "  (e $(Split-Path $backupClaudeJson -Leaf))" }
+}
+
 Show-Resumo -Titulo 'Ambiente importado' -Campos ([ordered]@{
     'pacote'  = $Pacote
-    'backups' = $(if ($backupClaude) { "$backupClaude  (e .claude.json.bkp)" } else { 'nao havia ambiente anterior' })
+    'backups' = $resumoBackups
 }) -Proximo @(
     '1. npm i -g @anthropic-ai/claude-code      (versao no MANIFESTO.md)',
     '2. instale a extensao do Claude Code no seu editor, se usar',

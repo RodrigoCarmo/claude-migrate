@@ -83,9 +83,13 @@ Duas consequências que valem saber antes de rodar:
   então a idade do arquivo não entra na decisão. Importar no próprio PC que exportou
   funciona, e o efeito é reverter a máquina para o momento do export.
 
-O backup (`~\.claude.bkp`) é criado **apenas na primeira vez**, de propósito, para não
-destruir o registro do ambiente original. O efeito colateral é que, a partir do segundo
-import, o trabalho intermediário não está nem no ambiente vivo nem no backup.
+Cada import faz o seu próprio backup, carimbado com data e hora
+(`~\.claude.bkp.20260825-143000`, e o `.claude.json` correspondente), e nenhum é
+sobrescrito. O mais antigo continua sendo o registro do ambiente original, e o trabalho
+feito entre dois imports fica guardado no backup do import seguinte.
+
+Backup completo ocupa espaço, e o `.claude` carrega as transcrições. Quando existe mais
+de um, o import avisa; apagar os que não servem mais é decisão sua.
 
 ---
 
