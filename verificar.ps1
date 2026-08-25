@@ -51,13 +51,8 @@ if (-not (Test-Path $analisador)) {
 
 if ($SemCor) { $env:NO_COLOR = '1' }
 
-# O processo PowerShell ja detectou o que este console aguenta. Repassar evita
-# que o Node redescubra com menos informacao e desenhe caixas que viram lixo.
-if (Get-Command Get-CapacidadesUi -ErrorAction SilentlyContinue) {
-    $capacidades = Get-CapacidadesUi
-    $env:CM_UNICODE = if ($capacidades.Unicode) { '1' } else { '0' }
-    $env:CM_LARGURA = [string]$capacidades.Largura
-}
+# CM_UNICODE e CM_LARGURA ja foram publicados no ambiente pelo Initialize-Ui, e
+# o processo Node os herda: nao ha o que repassar aqui.
 
 # De onde veio este ambiente, quando o extrair/importar registraram.
 if (Get-Command Get-EstadoMigracao -ErrorAction SilentlyContinue) {

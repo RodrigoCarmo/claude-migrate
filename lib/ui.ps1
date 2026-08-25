@@ -102,30 +102,13 @@ function Join-Detalhe {
 $script:GlifosUnicode = @{
     ok = [char]0x2713; erro = [char]0x2717; aviso = [char]0x26A0; info = [char]0x2139
     seta = [char]0x279C; ponto = [char]0x00B7; losango = [char]0x25C6; pendente = [char]0x25CB
-    barraCheia = [char]0x2588; barraVazia = [char]0x2591; linha = [char]0x2500
-    cantoSE = [char]0x250C; cantoSD = [char]0x2510; cantoIE = [char]0x2514; cantoID = [char]0x2518
-    vertical = [char]0x2502; ramo = [char]0x251C; fim = [char]0x2514
+    linha = [char]0x2500
 }
 
 $script:GlifosAscii = @{
     ok = '+'; erro = 'x'; aviso = '!'; info = 'i'
     seta = '>'; ponto = '-'; losango = '*'; pendente = 'o'
-    barraCheia = '#'; barraVazia = '.'; linha = '-'
-    cantoSE = '+'; cantoSD = '+'; cantoIE = '+'; cantoID = '+'
-    vertical = '|'; ramo = '+'; fim = '\'
-}
-
-<#
-O que este console aguenta. O verificar.ps1 repassa isto ao processo Node para
-que os dois lados desenhem igual, em vez de cada um adivinhar por conta.
-#>
-function Get-CapacidadesUi {
-    return [pscustomobject]@{
-        Unicode  = $script:Ui.Unicode
-        Cor      = $script:Ui.Cor
-        Largura  = $script:Ui.Largura
-        Animavel = $script:Ui.Animavel
-    }
+    linha = '-'
 }
 
 function Get-Glifo {
@@ -278,36 +261,6 @@ function Show-Erro {
     Write-Cor "  $(Get-Glifo erro)  " 'Red' -SemQuebra
     Write-Cor $Texto 'Red'
     foreach ($detalhe in $Detalhes) { Write-Cor "     $detalhe" 'DarkGray' }
-}
-
-<#
-Barra de progresso para laco proprio, onde nao ha processo externo para observar.
-#>
-function Show-Barra {
-    param(
-        [Parameter(Mandatory)][int]$Atual,
-        [Parameter(Mandatory)][int]$Total,
-        [Parameter(Mandatory)][string]$Mensagem,
-        [int]$Comprimento = 24
-    )
-    if (-not $script:Ui.Animavel -or $Total -le 0) { return }
-
-    $fracao = [Math]::Min(1.0, $Atual / $Total)
-    $cheias = [int][Math]::Round($fracao * $Comprimento)
-    $barra = ([string](Get-Glifo barraCheia) * $cheias) +
-             ([string](Get-Glifo barraVazia) * ($Comprimento - $cheias))
-    $percentual = '{0,3:N0}%' -f ($fracao * 100)
-
-    Write-Host "`r" -NoNewline
-    Write-Cor '  ' 'Gray' -SemQuebra
-    Write-Cor $barra 'Magenta' -SemQuebra
-    Write-Cor "  $percentual  " 'White' -SemQuebra
-    Write-Cor "$Mensagem  ($Atual/$Total)" 'DarkGray' -SemQuebra
-}
-
-function Complete-Barra {
-    if (-not $script:Ui.Animavel) { return }
-    Write-Host ("`r" + (' ' * ($script:Ui.Largura + 4)) + "`r") -NoNewline
 }
 
 <#
