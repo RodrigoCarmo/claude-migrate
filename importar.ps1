@@ -225,14 +225,24 @@ if ((Test-Path $helperHist) -and (Test-Path $pastaProjects)) {
 
 # --- Anotar que este pacote foi aplicado ---
 if (-not $Simular) {
+    $agora = (Get-Date).ToString('o')
     $null = Set-EstadoMigracao @{
         pacote      = $Pacote
-        importadoEm = (Get-Date).ToString('o')
+        importadoEm = $agora
         backups     = [ordered]@{
             claude     = $backupClaude
             claudeJson = $backupClaudeJson
         }
     }
+    # as chaves acima sao sobrescritas pelo proximo import. O historico e o que
+    # permite ao restaurar.ps1 dizer de onde veio cada backup da lista.
+    $null = Add-HistoricoMigracao ([ordered]@{
+        acao             = 'import'
+        quando           = $agora
+        pacote           = $Pacote
+        backupClaude     = $backupClaude
+        backupClaudeJson = $backupClaudeJson
+    })
 }
 
 # --- Fechamento ---

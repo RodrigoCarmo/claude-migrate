@@ -170,3 +170,65 @@ function Set-EstadoMigracao {
     [IO.File]::WriteAllText($caminho, ($estado | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
     return $caminho
 }
+
+<#
+Acrescenta um evento ao historico do estado, preservando os anteriores.
+
+O estado tambem guarda as chaves do ultimo import, que o verificar.ps1 le. O
+historico existe porque essas chaves sao sobrescritas a cada import: sem ele, o
+caminho do backup de dois imports atras nao esta em lugar nenhum, alem do
+carimbo no nome da pasta.
+#>
+function Add-HistoricoMigracao {
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Evento)
+
+    $historico = @()
+    $atual = Get-EstadoMigracao
+    if ($atual -and $atual.historico) { $historico = @($atual.historico) }
+
+    return (Set-EstadoMigracao @{ historico = @($historico) + @([pscustomobject]$Evento) })
+}
+
+<#
+Os backups de .claude que existem neste perfil, do mais recente para o mais
+antigo, anotados com o que o historico souber sobre a origem de cada um.
+
+Le o disco, e nao apenas o estado: um backup continua valido mesmo que o
+.claude-migrate.json tenha sido apagado, e o inverso nao e verdade.
+#>
+function Get-BackupsDisponiveis {
+    $historico = @()
+    $estado = Get-EstadoMigracao
+    if ($estado -and $estado.historico) { $historico = @($estado.historico) }
+
+    # o .claude.bkp sem carimbo vem de uma versao anterior deste projeto, quando
+    # havia um backup so: ainda e um ponto de retorno legitimo
+    $pastas = @(Get-ChildItem $env:USERPROFILE -Filter '.claude.bkp*' -Directory -Force -ErrorAction SilentlyContinue)
+
+    $lista = foreach ($pasta in $pastas) {
+        # '.claude.bkp.20260825-143000' -> '.20260825-143000', e o .json de par
+        # carrega o mesmo sufixo. '' no caso do backup sem carimbo.
+        $sufixo = $pasta.Name.Substring('.claude.bkp'.Length)
+        $json = Join-Path $env:USERPROFILE ".claude.json.bkp$sufixo"
+
+        $evento = @($historico | Where-Object { $_.backupClaude -eq $pasta.FullName })[-1]
+        $origem = 'sem registro no historico'
+        if ($evento) {
+            $origem = switch ($evento.acao) {
+                'import'      { "antes do import de $(Split-Path $evento.pacote -Leaf)" }
+                'restauracao' { "antes de restaurar $(Split-Path $evento.de -Leaf)" }
+                default       { $evento.acao }
+            }
+        }
+
+        [pscustomobject]@{
+            Caminho = $pasta.FullName
+            Nome    = $pasta.Name
+            Quando  = $pasta.CreationTime
+            Json    = $(if (Test-Path $json) { $json } else { $null })
+            Origem  = $origem
+        }
+    }
+
+    return @($lista | Sort-Object Quando -Descending)
+}

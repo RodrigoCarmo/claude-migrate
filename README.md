@@ -21,6 +21,7 @@ descarta arquivos e pastas ocultas e os `.git` dos marketplaces de plugin se per
 | `extrair.ps1` | destino | abre o pacote e confere a integridade |
 | `importar.ps1` | destino | faz backup, aplica, mescla e remapeia caminhos |
 | `verificar.ps1` | destino | relata o que consegue rodar nesta máquina |
+| `restaurar.ps1` | destino | lista os backups e devolve o ambiente a um deles |
 
 `lib/` contém os helpers em Node: inventário, histórico, leitura de configuração,
 `settings.local.json` de projeto e o analisador do verificador.
@@ -37,8 +38,11 @@ O pacote gerado traz dois arquivos de apoio, além do ambiente em si:
 
 ## Estado da migração
 
-`extrair.ps1` e `importar.ps1` registram o que fizeram em `~\.claude-migrate.json`:
-a pasta do pacote, o `.tgz` de origem, as datas e onde ficaram os backups.
+`extrair.ps1`, `importar.ps1` e `restaurar.ps1` registram o que fizeram em
+`~\.claude-migrate.json`: a pasta do pacote, o `.tgz` de origem, as datas e onde
+ficaram os backups. As chaves do último import são sobrescritas pelo import seguinte,
+então existe também um `historico`, que acumula um evento por import e por
+restauração. É dele que o `restaurar.ps1` tira a origem de cada backup que lista.
 
 Não substitui os parâmetros, que continuam obrigatórios e explícitos. Serve de trilha:
 é dali que o verificador diz de qual pacote o ambiente veio, e é onde estão os caminhos
@@ -91,6 +95,10 @@ feito entre dois imports fica guardado no backup do import seguinte.
 Backup completo ocupa espaço, e o `.claude` carrega as transcrições. Quando existe mais
 de um, o import avisa; apagar os que não servem mais é decisão sua.
 
+Para voltar a um deles, use o `restaurar.ps1`, que lista o que existe e copia o backup
+escolhido de volta. Ele não move nada: guarda o ambiente atual como um backup novo
+antes de escrever, então voltar para o ponto errado também tem volta.
+
 ---
 
 ## Histórico de conversas
@@ -138,7 +146,10 @@ listando os hooks capazes de bloquear ações, que só o dono do ambiente pode v
 
 - Windows apenas. macOS e Linux não foram testados.
 - O ciclo export → extrair → importar foi exercitado de ponta a ponta contra um perfil
-  isolado, mas a **restauração a partir dos backups** nunca foi. Rode `-Simular` antes.
+  isolado.
+- O `restaurar.ps1` foi exercitado de ida e volta contra um perfil sintético, mas **não
+  contra um `.claude` real com plugins**: os `.pack` chegam read-only, e o `-Force` do
+  `Remove-Item` ainda não foi exercido nesse caso. Rode `-Simular` antes.
 - Dependências internas dos scripts (bibliotecas, arquivos de configuração que eles leiam)
   não são verificadas.
 - O arquivo de estado fica em `~\.claude-migrate.json` depois da migração; hoje nenhum

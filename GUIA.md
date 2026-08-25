@@ -89,7 +89,7 @@ Se aparecerem sessões órfãs, o repositório está em outro caminho aqui:
 
 Faz backup de `~\.claude` e `~\.claude.json` antes de mexer, um backup novo a cada
 import e carimbado com data e hora, aplica e chama o verificador. Os caminhos ficam
-registrados em `~\.claude-migrate.json`.
+registrados em `~\.claude-migrate.json`. Se precisar desfazer, veja "Voltar atrás".
 
 ### 9. Leia o verificador
 
@@ -128,6 +128,47 @@ Com tudo funcionando, apague o `.tgz` e a pasta extraída.
 | `extrair.ps1` | `-Arquivo`, `-Destino` | `-Limpar` |
 | `importar.ps1` | `-Pacote` | `-Simular`, `-RemapearPaths` |
 | `verificar.ps1` | | `-SemCor` |
+| `restaurar.ps1` | | `-Backup`, `-Simular`, `-Forcar` |
+
+---
+
+## Voltar atrás
+
+Cada import guarda o ambiente que estava na máquina em `~\.claude.bkp.<data>-<hora>`.
+O `restaurar.ps1` devolve o ambiente a um desses pontos.
+
+**1. Veja o que existe.** Sem parâmetro nenhum ele só lista, e não escreve nada:
+
+```powershell
+.\restaurar.ps1
+```
+
+Cada linha traz a data e de onde o backup veio, por exemplo `antes do import de
+claude-restore`. Backup sem o `.claude.json` de par aparece marcado: ele restaura a
+árvore, mas deixa a configuração de projetos e de servidores MCP como está hoje.
+
+**2. Simule.** Mostra quantos arquivos entram e saem, sem tocar em nada. Pode rodar com
+o Claude Code aberto:
+
+```powershell
+.\restaurar.ps1 -Backup "$env:USERPROFILE\.claude.bkp.20260825-143000" -Simular
+```
+
+**3. Feche o Claude Code**, a CLI e o app de desktop. Com ele aberto, a aplicação
+reescreve arquivos em `~\.claude` no meio da cópia e o resultado não é nem o backup nem
+o ambiente que estava lá. O script recusa rodar nessa situação; `-Forcar` passa por
+cima, e só faz sentido se você tiver certeza de que o processo encontrado não é o
+Claude.
+
+**4. Aplique.**
+
+```powershell
+.\restaurar.ps1 -Backup "$env:USERPROFILE\.claude.bkp.20260825-143000"
+```
+
+O backup escolhido é copiado, nunca movido, e continua no lugar depois. Antes de
+escrever, o ambiente atual vira um backup novo, então errar o ponto de retorno não
+custa nada: rode de novo apontando para outro. No fim o verificador roda sozinho.
 
 ---
 
@@ -153,4 +194,4 @@ Com tudo funcionando, apague o `.tgz` e a pasta extraída.
 | script não executa | `powershell -ExecutionPolicy Bypass -File .\verificar.ps1` |
 | conversas não aparecem | abra o Claude na pasta do repositório; se faltarem, veja o passo 7 |
 | glifos saem como `+` e `-` | o console não está em UTF-8; a saída continua correta, só em ASCII |
-| quer voltar atrás | apague o que veio e renomeie o backup mais recente, `~\.claude.bkp.<data>-<hora>` e `~\.claude.json.bkp.<data>-<hora>` |
+| quer voltar atrás | `.\restaurar.ps1` lista os backups; veja "Voltar atrás" acima |
