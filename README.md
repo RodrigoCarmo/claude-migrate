@@ -144,3 +144,7 @@ listando os hooks capazes de bloquear ações, que só o dono do ambiente pode v
   trata; `exportar.ps1` e `importar.ps1` não.
 - Não foi verificado se o `sessions-index.json`, copiado por cima, pode esconder do
   `/resume` uma sessão que existe apenas no destino.
+
+## Licença
+
+[MIT](LICENSE) © Rodrigo Carmo
