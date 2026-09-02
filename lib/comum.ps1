@@ -92,9 +92,14 @@ function Copiar-Arvore {
         [string]$Mensagem
     )
     if (-not $Mensagem) { $Mensagem = "copiando $(Split-Path $De -Leaf)" }
+    # /XJF deixa symlink de arquivo de fora. O Claude Code aponta debug\latest para o log
+    # da sessao, e o log e apagado antes do link: robocopy segue o symlink, nao acha o
+    # alvo e devolve 9. Isso abortava o import inteiro por causa de um log volatil, com o
+    # backup ja completo. Junction de diretorio continua sendo seguida (sem /XJD): quem
+    # move plugins para outro disco quer os bytes dentro do backup.
     # robocopy usa 0-7 para sucesso e 8+ para erro real
     $null = Invoke-Externo -Programa 'robocopy' -Mensagem $Mensagem -ExitAceitavel 7 `
-        -Argumentos @($De, $Para, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1')
+        -Argumentos @($De, $Para, '/E', '/XJF', '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:1', '/W:1')
     $global:LASTEXITCODE = 0
 }
 
